@@ -68,6 +68,10 @@ function dataUrlToBlob(dataUrl: string) {
 const useDishGroupsRenderData = () => {
   const router = useRouter();
   const { type } = router.query;
+  console.log(
+    "🚀 ~ file: index.tsx:71 ~ useDishGroupsRenderData ~ router.query:",
+    router.query
+  );
 
   const dishGroupList = router.query["dish-group-list"] as String | undefined;
   const dishGroups = (dishGroupList || "")
@@ -121,6 +125,10 @@ const useDishGroupsRenderData = () => {
       )
     );
   }, [dishGroupsRenderData, type]);
+  console.log(
+    "🚀 ~ file: index.tsx:124 ~ useDishGroupsRenderData ~ dishGroupsRenderData:",
+    dishGroupList
+  );
 
   return {
     dishGroupsRenderData,
@@ -282,6 +290,7 @@ function CateringMenuCard(props: PropsWithChildren<{}>) {
       position="relative"
       overflow="hidden"
       id={CATERING_MENU_CARD_ID}
+      minW={"600px"}
     >
       {props.children}
     </Box>
