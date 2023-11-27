@@ -8,10 +8,25 @@ import {
   List,
   ListItem,
   Code,
+  Container,
+  Button,
+  Spinner,
 } from "@chakra-ui/react";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { Fragment, PropsWithChildren, ReactNode, useMemo } from "react";
+import {
+  Fragment,
+  PropsWithChildren,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { toPng } from "html-to-image";
+import { useToast } from "@chakra-ui/react";
+
+const CATERING_MENU_CARD_ID = "catering-menu-card";
+const CATERING_MENU_IMAGE_ID = "catering-menu-image";
 
 const colors = [
   "red.100",
@@ -36,22 +51,30 @@ const colors = [
   "gray.200",
 ];
 
+function dataUrlToBlob(dataUrl: string) {
+  const arr = dataUrl.split(","),
+    mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+
+  return new Blob([u8arr], { type: mime });
+}
+
 const useDishGroupsRenderData = () => {
   const router = useRouter();
-  const dishGroupList = router.query["dish-group-list"] as String;
-  const dishGroups = String(dishGroupList)
+  const { type } = router.query;
+
+  const dishGroupList = router.query["dish-group-list"] as String | undefined;
+  const dishGroups = (dishGroupList || "")
     .split("chunk")
     .filter((item) => !!item);
 
-  const _mockDishGroups = [
-    ...dishGroups,
-    ...dishGroups,
-    ...dishGroups,
-    ...dishGroups,
-    ...dishGroups,
-  ];
-
-  const dishGroupsRenderData = _mockDishGroups.reduce(
+  const dishGroupsRenderData = dishGroups.reduce(
     (_dishGroupsRenderData, currentString) => {
       const indexOfFirstDash = currentString.indexOf("-");
       const groupNameString = currentString.substring(0, indexOfFirstDash);
@@ -86,16 +109,18 @@ const useDishGroupsRenderData = () => {
     [] as DishGroup[]
   );
 
-  const isValid = useMemo(
-    () =>
+  const isValid = useMemo(() => {
+    return (
+      !!dishGroupsRenderData.length &&
       dishGroupsRenderData.every(
         (dishGroup) =>
           !!dishGroup.groupName &&
           !!dishGroup.dishes.length &&
-          dishGroup.noOfChoose >= 0
-      ),
-    [dishGroupsRenderData]
-  );
+          dishGroup.noOfChoose >= 0 &&
+          !!type
+      )
+    );
+  }, [dishGroupsRenderData, type]);
 
   return {
     dishGroupsRenderData,
@@ -104,18 +129,138 @@ const useDishGroupsRenderData = () => {
 };
 
 export default function Home() {
+  const { dishGroupsRenderData, isValid } = useDishGroupsRenderData();
+
   return (
     <main>
       <Head>
         <title>Convert image tool!</title>
       </Head>
-      <Box bg="gray.100" p={4} w="100%" color="black" borderRadius="lg">
-        <Stack spacing={8}>
-          <HomeHeader />
-          <CateringMenuSetion />
-        </Stack>
-      </Box>
+      <Container maxW={"container.xl"}>
+        <Box bg="gray.100" p={4} w="100%" color="black" borderRadius="lg">
+          <Stack spacing={8}>
+            <HomeHeader />
+            {!!dishGroupsRenderData.length && (
+              <>
+                {isValid ? (
+                  <>
+                    <CateringMenuSetion
+                      dishGroupsRenderData={dishGroupsRenderData}
+                    />
+                    <CateringMenuImageSection
+                      dishGroupsRenderData={dishGroupsRenderData}
+                      isValid={isValid}
+                    />
+                  </>
+                ) : (
+                  <CateringMenuSectionError />
+                )}
+              </>
+            )}
+
+            {!dishGroupsRenderData.length && <CateringMenuEmptySection />}
+          </Stack>
+        </Box>
+      </Container>
     </main>
+  );
+}
+
+function CateringMenuImageSection({
+  dishGroupsRenderData,
+  isValid,
+}: {
+  dishGroupsRenderData: DishGroup[];
+  isValid: boolean;
+}) {
+  const [dataUrl, setDataUrl] = useState("");
+  const [processing, setProcessing] = useState(true);
+  const toast = useToast();
+
+  useEffect(() => {
+    console.log("RENDER...");
+    toPng(document.getElementById(CATERING_MENU_CARD_ID) as HTMLElement, {
+      cacheBust: true,
+    }).then(function (dataUrl) {
+      if (isValid) {
+        setDataUrl(dataUrl);
+        onAutomaticallyCopy();
+      }
+      setProcessing(false);
+    });
+  }, [dishGroupsRenderData, isValid]);
+
+  function onAutomaticallyCopy() {
+    setTimeout(() => {
+      onCopy();
+    }, 1000);
+  }
+
+  function toastSuccess() {
+    toast({
+      title: "Copy thành công!",
+      description:
+        "Hình ảnh đã được copy vào clipboard, Ctrl + V để dán vào ứng dụng khác",
+      status: "success",
+      duration: 3000,
+      isClosable: true,
+    });
+  }
+
+  const onCopy = () => {
+    if (!isValid) return;
+
+    const imageElement = document.getElementById(
+      CATERING_MENU_IMAGE_ID
+    ) as HTMLImageElement;
+    const blob = dataUrlToBlob(imageElement.src);
+    const item = new ClipboardItem({ "image/png": blob });
+    navigator.clipboard.write([item]);
+
+    toastSuccess();
+  };
+
+  const downloadImage = () => {
+    const link = document.createElement("a");
+    link.download = "image.png";
+    link.href = dataUrl;
+    link.click();
+  };
+
+  if (processing) {
+    return (
+      <Stack>
+        <Text fontSize="2xl" fontWeight="bold">
+          Đang xử lý...
+        </Text>
+        <Text fontSize="md" color="gray.500">
+          Vui lòng đợi trong giây lát
+        </Text>
+        <Spinner
+          thickness="4px"
+          speed="0.65s"
+          emptyColor="gray.200"
+          color="blue.500"
+          size="xl"
+        />
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack>
+      {isValid && (
+        <Stack direction="row" justifyContent="center">
+          <Button colorScheme="blue" onClick={downloadImage}>
+            Tải ảnh về
+          </Button>
+          <Button colorScheme="green" onClick={onCopy}>
+            Copy vào clipboard
+          </Button>
+        </Stack>
+      )}
+      {isValid && dataUrl && <img src={dataUrl} id={CATERING_MENU_IMAGE_ID} />}
+    </Stack>
   );
 }
 
@@ -136,19 +281,93 @@ function CateringMenuCard(props: PropsWithChildren<{}>) {
       boxShadow="lg"
       position="relative"
       overflow="hidden"
+      id={CATERING_MENU_CARD_ID}
     >
       {props.children}
     </Box>
   );
 }
 
-function CateringMenuSetion() {
-  const { dishGroupsRenderData, isValid } = useDishGroupsRenderData();
-
+function AbsoluteHiddenBox(props: PropsWithChildren<{}>) {
   return (
-    <CateringMenuCard>
-      {isValid && (
-        <>
+    <Box position="absolute" top={-9999} left={-9999}>
+      {props.children}
+    </Box>
+  );
+}
+
+function CateringMenuSectionError() {
+  return (
+    <Box
+      bg="white"
+      w="100%"
+      p={8}
+      borderRadius="lg"
+      boxShadow="lg"
+      position="relative"
+      overflow="hidden"
+      id={CATERING_MENU_CARD_ID}
+    >
+      <Stack>
+        <Text fontSize="2xl" fontWeight="bold" color="red">
+          Menu không đúng cấu trúc
+        </Text>
+        <Text fontSize="md" color="gray.500">
+          Vui lòng kiểm tra lại dữ liệu từ phía ứng dụng
+        </Text>
+        <List>
+          <ListItem>
+            Kiểm tra dữ liệu cột <Kbd>Thực đơn</Kbd> có phải là tên một menu hay
+            chưa?
+          </ListItem>
+          <ListItem>
+            Kiểm tra dữ liệu cột <Kbd>Danh sách món ăn</Kbd>, <Kbd>mon2</Kbd>,{" "}
+            <Kbd>mon3</Kbd>, <Kbd>mon4</Kbd>, <Kbd>mon5</Kbd> có đúng cấu trúc
+            giống ví dụ sau hay chưa:
+            <br />
+            <Box my={2}>
+              <Code>
+                Bánh Ngọt - Chọn: 4 món (Bánh su kem ; Bánh tiramisu ; Bánh
+                croissant ; Panna cotta ; Mousse tiramisu ; Chocolate danish)
+              </Code>
+            </Box>
+          </ListItem>
+        </List>
+      </Stack>
+    </Box>
+  );
+}
+
+function CateringMenuEmptySection() {
+  return (
+    <Box
+      bg="white"
+      w="100%"
+      p={8}
+      borderRadius="lg"
+      boxShadow="lg"
+      position="relative"
+      overflow="hidden"
+      id={CATERING_MENU_CARD_ID}
+    >
+      <Stack>
+        <Text fontSize="md" color="gray.500">
+          Không tìm thấy dữ liệu từ ứng dụng
+        </Text>
+      </Stack>
+    </Box>
+  );
+}
+
+function CateringMenuSetion({
+  dishGroupsRenderData,
+}: {
+  dishGroupsRenderData: DishGroup[];
+}) {
+  return (
+    <AbsoluteHiddenBox>
+      <CateringMenuCard>
+        <Box>
           <PITOCateringLogo />
           <CateringMenuHeader />
           <Stack
@@ -191,38 +410,9 @@ function CateringMenuSetion() {
                 </Fragment>
               ))}
           </Stack>
-        </>
-      )}
-
-      {!isValid && (
-        <Stack>
-          <Text fontSize="2xl" fontWeight="bold" color="red">
-            Menu không đúng cấu trúc
-          </Text>
-          <Text fontSize="md" color="gray.500">
-            Vui lòng kiểm tra lại dữ liệu từ phía ứng dụng
-          </Text>
-          <List>
-            <ListItem>
-              Kiểm tra dữ liệu cột <Kbd>Thực đơn</Kbd> có phải là tên một menu
-              hay chưa?
-            </ListItem>
-            <ListItem>
-              Kiểm tra dữ liệu cột <Kbd>Danh sách món ăn</Kbd>, <Kbd>mon2</Kbd>,{" "}
-              <Kbd>mon3</Kbd>, <Kbd>mon4</Kbd>, <Kbd>mon5</Kbd> có đúng cấu trúc
-              giống ví dụ sau hay chưa:
-              <br />
-              <Box my={2}>
-                <Code>
-                  Bánh Ngọt - Chọn: 4 món (Bánh su kem ; Bánh tiramisu ; Bánh
-                  croissant ; Panna cotta ; Mousse tiramisu ; Chocolate danish)
-                </Code>
-              </Box>
-            </ListItem>
-          </List>
-        </Stack>
-      )}
-    </CateringMenuCard>
+        </Box>
+      </CateringMenuCard>
+    </AbsoluteHiddenBox>
   );
 }
 
