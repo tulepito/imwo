@@ -149,6 +149,11 @@ const useDishGroupsRenderData = () => {
         const percentage =
           (dishGroup.noOfColumnsInsideColumn / totalNoOfColumns) * 100;
         noOfColumns = Math.floor((percentage / 100) * remainingColumns);
+
+        // make sure noOfColumns is at least 1
+        if (noOfColumns < 1) {
+          noOfColumns = 1;
+        }
       }
 
       return {
