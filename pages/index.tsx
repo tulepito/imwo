@@ -28,6 +28,9 @@ import { useToast } from "@chakra-ui/react";
 const CATERING_MENU_CARD_ID = "catering-menu-card";
 const CATERING_MENU_IMAGE_ID = "catering-menu-image";
 
+const MAX_ROW_INSIDE_COLUMN = 10;
+const MAX_COLUMNS = 10;
+
 const colors = [
   "red.100",
   "green.100",
@@ -38,7 +41,6 @@ const colors = [
   "orange.100",
   "cyan.100",
   "teal.100",
-  "gray.100",
   "red.200",
   "green.200",
   "blue.200",
@@ -48,7 +50,6 @@ const colors = [
   "orange.200",
   "cyan.200",
   "teal.200",
-  "gray.200",
 ];
 
 function dataUrlToBlob(dataUrl: string) {
@@ -68,17 +69,13 @@ function dataUrlToBlob(dataUrl: string) {
 const useDishGroupsRenderData = () => {
   const router = useRouter();
   const { type } = router.query;
-  console.log(
-    "🚀 ~ file: index.tsx:71 ~ useDishGroupsRenderData ~ router.query:",
-    router.query
-  );
 
   const dishGroupList = router.query["dish-group-list"] as String | undefined;
   const dishGroups = (dishGroupList || "")
     .split("chunk")
     .filter((item) => !!item);
 
-  const dishGroupsRenderData = dishGroups.reduce(
+  const precalculatedRowDishGroupsRenderData = dishGroups.reduce(
     (_dishGroupsRenderData, currentString) => {
       const indexOfFirstDash = currentString.indexOf("-");
       const groupNameString = currentString.substring(0, indexOfFirstDash);
@@ -107,11 +104,59 @@ const useDishGroupsRenderData = () => {
         .split(";")
         .map((dish) => dish.trim());
 
-      _dishGroupsRenderData.push({ groupName, noOfChoose, dishes });
+      let noOfColumnsInsideColumn = 1;
+      if (dishes.length > MAX_ROW_INSIDE_COLUMN) {
+        noOfColumnsInsideColumn = Math.ceil(
+          dishes.length / MAX_ROW_INSIDE_COLUMN
+        );
+      }
+
+      _dishGroupsRenderData.push({
+        groupName,
+        noOfChoose,
+        dishes,
+        noOfColumnsInsideColumn,
+      });
       return _dishGroupsRenderData;
     },
     [] as DishGroup[]
   );
+
+  const dishGroupsRenderData: DishGroup[] = useMemo(() => {
+    const totalNoOfColumns = precalculatedRowDishGroupsRenderData.reduce(
+      (totalNoOfColumns, dishGroup) => {
+        return totalNoOfColumns + dishGroup.noOfColumnsInsideColumn;
+      },
+      0
+    );
+    const noFixedColumns = precalculatedRowDishGroupsRenderData.length;
+    const noGreaterThan1Columns = precalculatedRowDishGroupsRenderData.filter(
+      (dishGroup) => dishGroup.noOfColumnsInsideColumn > 1
+    ).length;
+    const remainingColumns =
+      noGreaterThan1Columns + (MAX_COLUMNS - noFixedColumns);
+
+    if (totalNoOfColumns <= MAX_COLUMNS) {
+      return precalculatedRowDishGroupsRenderData;
+    }
+
+    return precalculatedRowDishGroupsRenderData.map((dishGroup) => {
+      let noOfColumns;
+
+      if (dishGroup.dishes.length <= MAX_ROW_INSIDE_COLUMN) {
+        noOfColumns = 1;
+      } else {
+        const percentage =
+          (dishGroup.noOfColumnsInsideColumn / totalNoOfColumns) * 100;
+        noOfColumns = Math.floor((percentage / 100) * remainingColumns);
+      }
+
+      return {
+        ...dishGroup,
+        noOfColumnsInsideColumn: noOfColumns,
+      };
+    });
+  }, [precalculatedRowDishGroupsRenderData]);
 
   const isValid = useMemo(() => {
     return (
@@ -125,10 +170,6 @@ const useDishGroupsRenderData = () => {
       )
     );
   }, [dishGroupsRenderData, type]);
-  console.log(
-    "🚀 ~ file: index.tsx:124 ~ useDishGroupsRenderData ~ dishGroupsRenderData:",
-    dishGroupList
-  );
 
   return {
     dishGroupsRenderData,
@@ -267,16 +308,25 @@ function CateringMenuImageSection({
           </Button>
         </Stack>
       )}
-      {isValid && dataUrl && <img src={dataUrl} id={CATERING_MENU_IMAGE_ID} />}
+      {isValid && dataUrl && (
+        <img
+          src={dataUrl}
+          style={{
+            objectFit: "contain",
+            maxHeight: dishGroupsRenderData.length * 300,
+          }}
+          id={CATERING_MENU_IMAGE_ID}
+        />
+      )}
     </Stack>
   );
 }
 
-const MAX_COLUMNS = 8;
 interface DishGroup {
   groupName: string;
   noOfChoose: number;
   dishes: string[];
+  noOfColumnsInsideColumn: number;
 }
 
 function CateringMenuCard(props: PropsWithChildren<{}>) {
@@ -388,36 +438,42 @@ function CateringMenuSetion({
           >
             {dishGroupsRenderData
               .slice(0, MAX_COLUMNS)
-              .map((dishGroup: DishGroup, idx) => (
-                <Fragment key={idx}>
-                  <Column>
-                    <ColumnHeader
-                      primaryText={dishGroup.groupName}
-                      secondaryText={
-                        <>
-                          Chọn{" "}
-                          <Text
-                            fontWeight="bold"
-                            color="black"
-                            as="span"
-                            fontSize="20px"
-                          >
-                            {dishGroup.noOfChoose}
-                          </Text>{" "}
-                          món
-                        </>
-                      }
-                    />
-                    <ColumnContent>
-                      <DishList>
-                        {dishGroup.dishes.map((dish) => (
-                          <DishListItem key={dish}>{dish}</DishListItem>
-                        ))}
-                      </DishList>
-                    </ColumnContent>
-                  </Column>
-                </Fragment>
-              ))}
+              .map((dishGroup: DishGroup, idx) => {
+                const width =
+                  dishGroup.noOfColumnsInsideColumn * 280 +
+                  (dishGroup.noOfColumnsInsideColumn - 1) * 10;
+
+                return (
+                  <Fragment key={idx}>
+                    <Column width={`${width}px`}>
+                      <ColumnHeader
+                        primaryText={dishGroup.groupName}
+                        secondaryText={
+                          <>
+                            Chọn{" "}
+                            <Text
+                              fontWeight="bold"
+                              color="black"
+                              as="span"
+                              fontSize="20px"
+                            >
+                              {dishGroup.noOfChoose}
+                            </Text>{" "}
+                            món
+                          </>
+                        }
+                      />
+                      <ColumnContent>
+                        <DishList>
+                          {dishGroup.dishes.map((dish) => (
+                            <DishListItem key={dish}>{dish}</DishListItem>
+                          ))}
+                        </DishList>
+                      </ColumnContent>
+                    </Column>
+                  </Fragment>
+                );
+              })}
           </Stack>
         </Box>
       </CateringMenuCard>
@@ -453,17 +509,22 @@ function CateringMenuHeader() {
   );
 }
 
-function DishList(props: PropsWithChildren<{}>) {
+function DishList({ children }: PropsWithChildren<{}>) {
   return (
-    <Stack spacing={2} alignItems="stretch">
-      {props.children}
+    <Stack
+      spacing={2}
+      flexDirection="row"
+      flexWrap="wrap"
+      justifyContent="stretch"
+    >
+      {children}
     </Stack>
   );
 }
 
 function DishListItem(props: PropsWithChildren<{}>) {
   return (
-    <Box bg="gray.50" px={4} py={2} w="auto" borderRadius="16px">
+    <Box bg="gray.50" px={4} py={2} borderRadius="16px" flexBasis="280px">
       -&nbsp;&nbsp;&nbsp;
       <Text as="span" fontWeight="semibold">
         {props.children}
@@ -472,9 +533,9 @@ function DishListItem(props: PropsWithChildren<{}>) {
   );
 }
 
-function Column(props: PropsWithChildren<{}>) {
+function Column(props: PropsWithChildren<{ width: string }>) {
   return (
-    <Stack spacing={4} flex={1} maxW="280px" minW={"280px"}>
+    <Stack w={props.width} minW={"280px"} flexShrink={0} spacing={4}>
       {props.children}
     </Stack>
   );
@@ -490,15 +551,17 @@ function ColumnHeader({
   const randomColor = colors[Math.floor(Math.random() * colors.length)];
   return (
     <Stack spacing={4}>
-      <Box
-        bg={randomColor}
-        px={8}
-        py={2}
-        w="100%"
-        borderRadius="16px"
-        boxShadow="sm"
-      >
-        <Text fontSize="lg" fontWeight="bold" textAlign="center">
+      <Box bg={randomColor} px={2} py={2} borderRadius="16px" boxShadow="sm">
+        <Text
+          noOfLines={2}
+          fontSize="lg"
+          height={"54px"}
+          fontWeight="bold"
+          textAlign="center"
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+        >
           {primaryText}
         </Text>
       </Box>
