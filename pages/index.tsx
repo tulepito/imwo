@@ -432,7 +432,6 @@ function CateringMenuSetion({
     <AbsoluteHiddenBox>
       <CateringMenuCard>
         <Box>
-          <PITOCateringLogo />
           <CateringMenuHeader />
           <Stack
             direction="row"
@@ -488,15 +487,30 @@ function CateringMenuSetion({
 
 function PITOCateringLogo() {
   return (
-    <Box position="absolute" top={3} left={0}>
+    <Box minW="300px">
       <Sprite
         imageUrl="/sample-menu.png"
-        x={0}
-        y={0}
+        x={24}
+        y={20}
         w={120}
-        h={80}
-        scale={10}
+        h={60}
+        scale={12}
       />
+    </Box>
+  );
+}
+
+function PITOCateringMenuInfoRightSection() {
+  const { price, "no-of-people": noOfPeople } = useRouter().query;
+
+  return (
+    <Box minW="300px">
+      <Text fontSize="lg" color="red.500" textAlign="right">
+        Đơn giá: <b>{price}/người</b>
+      </Text>
+      <Text fontSize="lg" color="red.500" textAlign="right">
+        Nhận đặt từ: <b>{noOfPeople} người</b>
+      </Text>
     </Box>
   );
 }
@@ -506,10 +520,18 @@ function CateringMenuHeader() {
   const { type } = router.query;
 
   return (
-    <Stack spacing={4} pb={8} color="red.500">
-      <Text fontSize="3xl" fontWeight="bold" align="center">
+    <Stack
+      direction="row"
+      pb={8}
+      alignItems="center"
+      justifyContent="space-between"
+      spacing={8}
+    >
+      <PITOCateringLogo />
+      <Text fontSize="3xl" color="red.500" fontWeight="bold" align="center">
         Menu: {type}
       </Text>
+      <PITOCateringMenuInfoRightSection />
     </Stack>
   );
 }
